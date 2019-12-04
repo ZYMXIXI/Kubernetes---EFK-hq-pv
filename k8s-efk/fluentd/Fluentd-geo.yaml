@@ -1,0 +1,62 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fluentd-config
+  namespace: elasticsearch
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+  system.conf: |-
+    <system>
+      root_dir /tmp/fluentd-buffers/
+    </system>
+  containers.input.conf: |-
+    <source>
+      @id fluentd-containers.log
+      @type tail
+      format /^(?<time>[A-z]{3} +[0-9]+ [0-9:]{8}) (?<hostname>[^ ]+) kernel: \[[0-9.]+\] PKLOG4 IN=(?<interface>[^ ]+) OUT=[^ ]* MAC=[^ ]+ SRC=(?<src_ip>[0-9.]+) DST=(?<dst_ip>[0-9.]+) LEN=(?<length>[^ ]+) TOS=(?<tos>[^ ]+) PREC=[^ ]+ TTL=(?<ttl>[0-9]+) ID=[^ ]+ .*PROTO=(?<proto>[^ ]+) SPT=(?<src_port>[0-9]+) DPT=(?<dst_port>[0-9]+)/
+      time_format %b %d %H:%M:%S
+      read_from_head true
+      path /work/var/log/*
+      pos_file /work/var/pos/iptables2es.dsas.pos
+      tag nogeo.iptables.filter
+    </source>
+
+    <match nogeo.**>
+      @type geoip
+      geoip_lookup_key src_ip
+      geoip_database "/opt/geoip/GeoLiteCity.dat"
+      <record>
+        country ${country_code["src_ip"]}
+      </record>
+      remove_tag_prefix nogeo
+      add_tag_prefix geo
+    </match>
+
+  output.conf: |-
+    <filter geo.**>
+      @type kubernetes_metadata
+    </filter>
+    <match **>
+      @id elasticsearch
+      @type elasticsearch
+      @log_level info
+      include_tag_key true
+      host 10.43.185.175
+      port 9200
+      logstash_format true
+      request_timeout    30s
+      <buffer>
+        @type file
+        path /var/log/fluentd-buffers/kubernetes.system.buffer
+        flush_mode interval
+        retry_type exponential_backoff
+        flush_thread_count 2
+        flush_interval 5s
+        retry_forever
+        retry_max_interval 30
+        chunk_limit_size 2M
+        queue_limit_length 8
+        overflow_action block
+      </buffer>
+    </match>

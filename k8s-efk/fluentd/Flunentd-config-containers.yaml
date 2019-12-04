@@ -1,0 +1,74 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: fluentd-config
+  namespace: elasticsearch
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+data:
+  system.conf: |-
+    <system>
+      root_dir /tmp/fluentd-buffers/
+    </system>
+  containers.input.conf: |-
+    <source>
+      @id fluentd-containers.log
+      @type tail
+      path /var/log/*.log
+      pos_file /var/log/es-containers.log.pos
+      time_format %Y-%m-%dT%H:%M:%S.%NZ
+      tag raw.kubernetes.*
+      read_from_head true
+      <filter raw.kubernetes.*>
+        @type parser
+        time_format %Y-%m-%d %H:%M:%S %Z
+        key_name log
+        suppress_parse_error_log true
+        reserve_data true
+        format /.*(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \w+?).+AccessInterceptor(.+time=(?<requesttime>.+?),)(.+method=(?<method>.+?),)(.+action=(?<action>.+?),)(.*locale=(?<locale>.+?),)(.+cost=(?<cost>.+?),)(.*userId=(?<userId>.*?),)(.*agent=(?<user-agent>.*?),)(.+token=(?<token>.*?),)(.+clientIp=(?<clientIp>.+?),)(.+clientType=(?<clientType>.+?),)(.*params={(?<params>.*?)})(.+status=(?<status>.*?),)(.*Json=(?<paramsOfJson>.*?)})/
+        types cost:integer,status:integer
+      </filter>
+    </source>
+    
+    <match raw.kubernetes.**>
+      @type geoip
+      @geoip_lookup_key clientIp
+      @geoip_database /home/fluent/GeoLiteCity.dat
+      <record>
+        latitude        ${latitude["clientIp"]}
+        longitude       ${longitude["clientIp"]}
+        country_code3   ${country_code3["clientIp"]}
+        country         ${country_code["clientIp"]}
+        country_name    ${country_name["clientIp"]}
+        dma             ${dma_code["clientIp"]}
+        area            ${area_code["clientIp"]}
+        region          ${region["clientIp"]}
+        city            ${city["clientIp"]}
+        location       '[${longitude["clientIp"]},${latitude["clientIp"]}]'
+      </record>
+    </match>
+
+    output.conf: |-
+    <match geoip.**>
+      @id elasticsearch
+      @type elasticsearch
+      @log_level info
+      include_tag_key true
+      host 10.43.185.175
+      port 9200
+      logstash_format true
+      request_timeout    30s
+      <buffer>
+        @type file
+        path /var/log/fluentd-buffers/kubernetes.system.buffer
+        flush_mode interval
+        retry_type exponential_backoff
+        flush_thread_count 2
+        flush_interval 5s
+        retry_forever
+        retry_max_interval 30
+        chunk_limit_size 2M
+        queue_limit_length 8
+        overflow_action block
+      </buffer>
+    </match>

@@ -1,0 +1,20 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: es-delete-job
+  namespace: elasticsearch
+spec:
+  schedule: "*/1 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: es-delete-job
+            image: hub.geovis.io/liux/centos:v1 
+            args:
+            - /bin/sh
+            - -c
+            - curl -XDELETE http://10.43.99.144:9200/es-$(date  +"%Y.%m.%d" -d "15 days ago")
+          restartPolicy: OnFailure
