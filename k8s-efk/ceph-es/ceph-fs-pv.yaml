@@ -11,9 +11,9 @@ spec:
     - ReadWriteMany
   cephfs:
     monitors: 
-    - 192.168.4.21:6789
-    - 192.168.4.22:6789
-    - 192.168.4.29:6789
+    - 192.168.4.21:****
+    - 192.168.4.22:****
+    - 192.168.4.29:****
     path: /k8svolume/pv-es-data1
     user: admin
     secretRef:
